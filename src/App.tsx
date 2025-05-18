@@ -4,8 +4,12 @@ import type { Person } from './interfaces/Person';
 import type { Transaction } from './interfaces/Transaction';
 import { CURRENCY } from './constants';
 import { formatNumber } from './utils/Utility';
+import { addPerson, addTransaction, deletePerson, deleteTransaction, fetchPerson, fetchTransactions } from './api';
+import { Swiper, SwiperSlide } from 'swiper/react';
+import 'swiper/swiper-bundle.css'
 
 const App: React.FC = () => {
+
   const [activeTab, setActiveTab] = useState<'home' | 'detail'>('home');
   const [selectedPerson, setSelectedPerson] = useState<Person | null>(null);
   const [isAddPersonModalOpen, setIsAddPersonModalOpen] = useState(false);
@@ -13,6 +17,7 @@ const App: React.FC = () => {
   const [newPersonName, setNewPersonName] = useState('');
   const [people, setPeople] = useState<Person[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+
   const [newTransaction, setNewTransaction] = useState<{
     type: 'given' | 'received' | 'settled';
     amount: string;
@@ -24,6 +29,26 @@ const App: React.FC = () => {
     note: '',
     date: new Date().toISOString().split('T')[0],
   });
+
+  useEffect(() => {
+    fetchPerson().then(lPerson => {
+      if (lPerson)
+        setPeople(lPerson);
+    });
+  }, [])
+
+  useEffect(() => {
+    fetchTransactions().then(lTransactions => {
+      if (lTransactions)
+        setTransactions(lTransactions);
+    });
+  }, [])
+
+  useEffect(() => {
+    if (selectedPerson) {
+      setSelectedPerson(people.find(p => p.id === selectedPerson.id) || null);
+    }
+  }, [people, selectedPerson])
 
   const getTotalBalance = () => {
     return people.reduce((sum, person) => sum + person.balance, 0);
@@ -45,55 +70,52 @@ const App: React.FC = () => {
 
   const handleAddPerson = () => {
     if (newPersonName.trim()) {
-      const newPerson: Person = {
-        id: people.length ? Math.max(...people.map(p => p.id)) + 1 : 1,
+      addPerson({
         name: newPersonName.trim(),
         balance: 0
-      };
-      setPeople([...people, newPerson]);
-      setNewPersonName('');
-      setIsAddPersonModalOpen(false);
+      }).then(() => {
+        fetchPerson().then(lPerson => {
+          if (lPerson)
+            setPeople(lPerson);
+        });
+        setNewPersonName('');
+        setIsAddPersonModalOpen(false);
+      })
     }
   };
+
   const handleAddTransaction = () => {
     if (selectedPerson && newTransaction.amount && parseFloat(newTransaction.amount) > 0) {
       const amount = parseFloat(newTransaction.amount);
-      const newTransactionObj: Transaction = {
-        id: transactions.length ? Math.max(...transactions.map(t => t.id)) + 1 : 1,
+
+      addTransaction({
         personId: selectedPerson.id,
         type: newTransaction.type,
         amount,
         note: newTransaction.note,
         date: newTransaction.date
-      };
-      setTransactions([...transactions, newTransactionObj]);
-      // Update person's balance
-      const updatedPeople = people.map(person => {
-        if (person.id === selectedPerson.id) {
-          let newBalance = person.balance;
-          if (newTransaction.type === 'given') {
-            newBalance += amount;
-          } else if (newTransaction.type === 'received') {
-            newBalance -= amount;
-          } else if (newTransaction.type === 'settled') {
-            newBalance = 0;
-          }
-          return { ...person, balance: newBalance };
-        }
-        return person;
+      }).then(() => {
+        fetchTransactions().then(lTransactions => {
+          if (lTransactions)
+            setTransactions(lTransactions);
+        });
+        fetchPerson().then(lPerson => {
+          if (lPerson)
+            setPeople(lPerson);
+
+        });
+        // Reset form
+        setNewTransaction({
+          type: 'given',
+          amount: '',
+          note: '',
+          date: new Date().toISOString().split('T')[0],
+        });
+        setIsAddTransactionModalOpen(false);
       });
-      setPeople(updatedPeople);
-      setSelectedPerson(updatedPeople.find(p => p.id === selectedPerson.id) || null);
-      // Reset form
-      setNewTransaction({
-        type: 'given',
-        amount: '',
-        note: '',
-        date: new Date().toISOString().split('T')[0],
-      });
-      setIsAddTransactionModalOpen(false);
     }
   };
+
   const handleQuickAction = (type: 'given' | 'received' | 'settled') => {
     setNewTransaction({
       ...newTransaction,
@@ -101,13 +123,42 @@ const App: React.FC = () => {
     });
     setIsAddTransactionModalOpen(true);
   };
+
+  const handleDeletePerson = (personId: number) => {
+    const confirmDelete = window.confirm('Are you sure you want to delete?');
+    if (confirmDelete) {
+      deletePerson(personId).then(() => {
+        fetchPerson().then(lPerson => {
+          if (lPerson)
+            setPeople(lPerson);
+        })
+      });
+    }
+  }
+
+  const handleDeleteTransaction = (transactionId: number) => {
+    const confirmDelete = window.confirm('Are you sure you want to delete this transaction?');
+    if (confirmDelete) {
+      deleteTransaction(transactionId).then(() => {
+        fetchTransactions().then(lTransactions => {
+          if (lTransactions)
+            setTransactions(lTransactions);
+        });
+        fetchPerson().then(lPerson => {
+          if (lPerson)
+            setPeople(lPerson);
+        });
+      });
+    }
+  }
+
   return (
     <div className="bg-black min-h-screen text-gray-200 relative pb-16">
       {/* Status Bar */}
       <div className="fixed top-0 w-full z-10 bg-gradient-to-r from-gray-900 to-black border-b border-gray-800 shadow-md">
         <div className="container mx-auto px-4 py-4">
           {activeTab === 'home' ? (
-            <h1 className="text-xl font-semibold text-gray-300">ledger line</h1>
+            <h1 className="text-xl font-semibold text-gray-300">Finance Tracker</h1>
           ) : (
             <div className="flex items-center">
               <button
@@ -143,33 +194,52 @@ const App: React.FC = () => {
             {/* People List */}
             <h2 className="text-lg font-semibold text-gray-300 mb-3">People</h2>
             <div className="space-y-3">
-              {people.map(person => (
-                <div
+              {people.length > 0 ? people.map(person => (
+                <Swiper
                   key={person.id}
-                  onClick={() => handlePersonClick(person)}
-                  className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 shadow-md border border-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-800 transition-all duration-200"
-                >
-                  <div>
-                    <p className="font-medium text-gray-300">{person.name}</p>
-                    <p className="text-sm text-gray-400">
-                      {person.balance > 0
-                        ? 'Owes you'
-                        : person.balance < 0
-                          ? 'You owe'
-                          : 'Settled'}
-                    </p>
-                  </div>
-                  <div className="flex items-center">
-                    <p className={`text-lg font-semibold mr-3 ${person.balance > 0 ? 'text-green-400' : person.balance < 0 ? 'text-red-400' : 'text-gray-400'}`}>
-                      {formatNumber(person.balance)}
-                    </p>
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
-                    </svg>
+                  slidesPerView={1}
+                  spaceBetween={10}
+                  className="person-swiper">
+                  <SwiperSlide>
+                    <div
+                      key={person.id}
+                      onClick={() => handlePersonClick(person)}
+                      className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 shadow-md border border-gray-700 flex justify-between items-center cursor-pointer hover:bg-gray-800 transition-all duration-200"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-300">{person.name}</p>
+                        <p className="text-sm text-gray-400">
+                          {person.balance > 0
+                            ? 'Owes you'
+                            : person.balance < 0
+                              ? 'You owe'
+                              : 'Settled'}
+                        </p>
+                      </div>
+                      <div className="flex items-center">
+                        <p className={`text-lg font-semibold mr-3 ${person.balance > 0 ? 'text-green-400' : person.balance < 0 ? 'text-red-400' : 'text-gray-400'}`}>
+                          {formatNumber(person.balance)}
+                        </p>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+                        </svg>
+                      </div>
+                    </div>
+                  </SwiperSlide>
+                  <SwiperSlide>
+                    <button
+                      className="bg-red-500 rounded-lg p-4 py-[27px] w-full h-full flex items-center justify-center text-white cursor-pointer"
+                      onClick={() => handleDeletePerson(person.id)}
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                      </svg>
+                      Delete
+                    </button>
+                  </SwiperSlide>
+                </Swiper>
 
-                  </div>
-                </div>
-              ))}
+              )) : <p className="text-center text-gray-500 py-6">No people added yet</p>}
             </div>
           </div>
         )}
@@ -179,7 +249,7 @@ const App: React.FC = () => {
             <div className="bg-gradient-to-r from-gray-900 to-gray-800 rounded-lg p-5 mb-6 shadow-lg border border-gray-700">
               <p className="text-sm text-gray-400 mb-1">Current Balance</p>
               <p className={`text-3xl font-bold ${selectedPerson.balance >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              {formatNumber(selectedPerson.balance)}
+                {formatNumber(selectedPerson.balance)}
               </p>
               <p className="text-sm text-gray-400 mt-1">
                 {selectedPerson.balance > 0
@@ -226,93 +296,80 @@ const App: React.FC = () => {
                 getPersonTransactions(selectedPerson.id)
                   .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
                   .map(transaction => (
-                    <div
+                    <Swiper
                       key={transaction.id}
-                      className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 shadow-md border border-gray-700 relative group"
-                    >
-                      <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                      slidesPerView={1}
+                      spaceBetween={10}
+                      className="transaction-swiper">
+                      <SwiperSlide>
+                        <div
+                          key={transaction.id}
+                          className="bg-gradient-to-r from-gray-800 to-gray-900 rounded-lg p-4 shadow-md border border-gray-700 relative group"
+                        >
+                          {/* <div className="absolute right-2 top-2 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const confirmDelete = window.confirm('Are you sure you want to delete this transaction?');
-                            if (confirmDelete) {
-                              const updatedTransactions = transactions.filter(t => t.id !== transaction.id);
-                              setTransactions(updatedTransactions);
-
-                              // Update person's balance
-                              const updatedPeople = people.map(person => {
-                                if (person.id === selectedPerson.id) {
-                                  let newBalance = person.balance;
-                                  if (transaction.type === 'given') {
-                                    newBalance -= transaction.amount;
-                                  } else if (transaction.type === 'received') {
-                                    newBalance += transaction.amount;
-                                  } else if (transaction.type === 'settled') {
-                                    // For settled transactions, we need to calculate the previous balance
-                                    const previousTransactions = transactions
-                                      .filter(t => t.id !== transaction.id && t.personId === selectedPerson.id);
-                                    newBalance = previousTransactions.reduce((sum, t) => {
-                                      if (t.type === 'given') return sum + t.amount;
-                                      if (t.type === 'received') return sum - t.amount;
-                                      return sum;
-                                    }, 0);
-                                  }
-                                  return { ...person, balance: newBalance };
-                                }
-                                return person;
-                              });
-                              setPeople(updatedPeople);
-                              setSelectedPerson(updatedPeople.find(p => p.id === selectedPerson.id) || null);
-                            }
-                          }}
+                          
                           className="text-gray-500 hover:text-red-400 transition-colors p-1"
                         >
                           <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4">
                             <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
                           </svg>
                         </button>
-                      </div>
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center">
-                          {transaction.type === 'given' && (
-                            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center mr-3">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4 text-green-400">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
-                              </svg>
+                      </div> */}
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center">
+                              {transaction.type === 'given' && (
+                                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center mr-3">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4 text-green-400">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 10.5 12 3m0 0 7.5 7.5M12 3v18" />
+                                  </svg>
+                                </div>
+                              )}
+                              {transaction.type === 'received' && (
+                                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center mr-3">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4 text-red-400">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
+                                  </svg>
+                                </div>
+                              )}
+                              {transaction.type === 'settled' && (
+                                <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center mr-3">
+                                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4 text-blue-400">
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+                                  </svg>
+                                </div>
+                              )}
+                              <div>
+                                <p className="font-medium text-gray-300 capitalize">{transaction.type}</p>
+                                <p className="text-sm text-gray-400">{transaction.note}</p>
+                              </div>
                             </div>
-                          )}
-                          {transaction.type === 'received' && (
-                            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center mr-3">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4 text-red-400">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5 12 21m0 0-7.5-7.5M12 21V3" />
-                              </svg>
+                            <div className="text-right">
+                              <p className={`font-semibold ${transaction.type === 'given'
+                                ? 'text-green-400'
+                                : transaction.type === 'received'
+                                  ? 'text-red-400'
+                                  : 'text-blue-400'
+                                }`}>
+                                {formatNumber(transaction.amount)}
+                              </p>
+                              <p className="text-xs text-gray-500">{new Date(transaction.date).toLocaleDateString()}</p>
                             </div>
-                          )}
-                          {transaction.type === 'settled' && (
-                            <div className="w-8 h-8 rounded-full bg-gray-700 flex items-center justify-center mr-3">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4 text-blue-400">
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
-                              </svg>
-                            </div>
-                          )}
-                          <div>
-                            <p className="font-medium text-gray-300 capitalize">{transaction.type}</p>
-                            <p className="text-sm text-gray-400">{transaction.note}</p>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className={`font-semibold ${transaction.type === 'given'
-                            ? 'text-green-400'
-                            : transaction.type === 'received'
-                              ? 'text-red-400'
-                              : 'text-blue-400'
-                            }`}>
-                            {CURRENCY}{transaction.amount.toFixed(2)}
-                          </p>
-                          <p className="text-xs text-gray-500">{new Date(transaction.date).toLocaleDateString()}</p>
-                        </div>
-                      </div>
-                    </div>
+                      </SwiperSlide>
+                      <SwiperSlide>
+                        <button
+                          className="bg-red-500 rounded-lg p-4 py-[27px] h-full w-full flex items-center justify-center text-white cursor-pointer"
+                          onClick={() => handleDeleteTransaction(transaction.id)}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="size-4">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                          </svg>
+                          Delete
+                        </button>
+                      </SwiperSlide>
+                    </Swiper>
                   ))
               ) : (
                 <p className="text-center text-gray-500 py-6">No transactions yet</p>
@@ -474,7 +531,7 @@ const App: React.FC = () => {
                 onChange={(e) => setNewTransaction({ ...newTransaction, note: e.target.value })}
                 className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 focus:outline-none focus:border-gray-600 resize-none"
                 placeholder="Add a note"
-                rows={3}
+                rows={2}
               ></textarea>
               <div className='text-xs text-gray-600 text-right'>max 50 chars.</div>
             </div>

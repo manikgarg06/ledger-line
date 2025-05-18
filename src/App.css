@@ -31,3 +31,8 @@
 .tab-press {
   animation: tabPress 0.2s ease-out;
 }
+
+.transaction-swiper,.person-swiper {
+  overflow: hidden;
+  border-radius: 0.5rem;
+}
