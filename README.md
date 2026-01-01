@@ -52,3 +52,56 @@ export default tseslint.config({
   },
 })
 ```
+
+---
+
+## Modularization Overview (Project-specific)
+
+The project has been refactored from a single App.tsx monolith into a modular structure with:
+- Core (presentational) components: stateless, reusable UI building blocks
+- Containers: page-level composition wiring data, state, and handlers
+
+### New Structure
+
+- src/components/core/
+  - index.tsx (barrel; imports Swiper CSS once: `import 'swiper/swiper-bundle.css'`)
+  - StatusBar.tsx
+  - BalanceSummaryCard.tsx
+  - PeopleList.tsx
+  - PersonBalanceCard.tsx
+  - QuickActions.tsx
+  - TransactionsList.tsx
+  - FloatingActionButton.tsx
+  - TabBar.tsx
+  - AddPersonModal.tsx
+  - AddTransactionModal.tsx
+
+- src/containers/
+  - HomeContainer.tsx
+    - Composes BalanceSummaryCard + PeopleList for the Home tab
+  - DetailContainer.tsx
+    - Composes PersonBalanceCard + QuickActions + TransactionsList for the Detail tab
+  - index.ts
+    - Barrel for container exports
+
+- src/App.tsx
+  - Now holds application state, effects, and event handlers
+  - Composes containers and core components
+
+### Usage examples
+
+- Import core components (presentational):
+  - import { StatusBar } from './components/core'
+
+- Import containers (page composition):
+  - import { HomeContainer, DetailContainer } from './containers'
+
+### Guidelines for future contributions
+
+- Add new reusable UI to src/components/core/index.tsx or split into files under src/components/core/ if the module grows. Keep these stateless and prop-driven.
+- Add new pages/sections as containers under src/containers/. Containers should:
+  - Receive data via props
+  - Call back via props for actions
+  - Avoid direct API calls (these belong in App-level logic or a state layer)
+- Keep business logic and data fetching in App.tsx or a dedicated state management layer.
+- Keep styling consistent with existing Tailwind utility classes.
