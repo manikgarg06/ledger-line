@@ -94,6 +94,15 @@ export function deletePerson(id: number): Promise<boolean> {
     const initialLength = persons.length;
     persons = persons.filter(p => p.id !== id);
     saveToLocalStorage(PERSONS_STORAGE_KEY, persons);
+
+    // Cascade delete FDs associated with this person
+    let fds = getFromLocalStorage<FD>(FDS_STORAGE_KEY);
+    const fdsInitialLength = fds.length;
+    fds = fds.filter(fd => fd.personId !== id);
+    if (fds.length !== fdsInitialLength) {
+        saveToLocalStorage(FDS_STORAGE_KEY, fds);
+    }
+
     return Promise.resolve(persons.length < initialLength);
 }
 
@@ -150,6 +159,15 @@ export function deleteFDPerson(id: number): Promise<boolean> {
     const initialLength = persons.length;
     persons = persons.filter(p => p.id !== id);
     saveToLocalStorage(FD_PERSONS_STORAGE_KEY, persons);
+
+    // Cascade delete FDs associated with this person in FD module
+    let fds = getFromLocalStorage<FD>(FDS_STORAGE_KEY);
+    const fdsInitialLength = fds.length;
+    fds = fds.filter(fd => fd.personId !== id);
+    if (fds.length !== fdsInitialLength) {
+        saveToLocalStorage(FDS_STORAGE_KEY, fds);
+    }
+
     return Promise.resolve(persons.length < initialLength);
 }
 

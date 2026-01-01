@@ -202,8 +202,12 @@ const FDTab: React.FC<{
     const confirmDelete = window.confirm('Are you sure you want to delete?');
     if (!confirmDelete) return;
     deleteFDPerson(personId).then(() => {
+      // Refresh FD people and FDs (cascade deletion removes FDs for this person)
       fetchFDPersons().then((lPerson) => {
         if (lPerson) setFDPeople(lPerson);
+      });
+      fetchFDs().then((lFDs) => {
+        if (lFDs) setFDs(lFDs);
       });
       if (selectedPerson?.id === personId) {
         setSelectedPerson(null);

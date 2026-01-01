@@ -88,6 +88,8 @@ const AddFDModal: React.FC<AddFDModalProps> = ({
   const { interest, maturityAmount } = computeFDInterest(amtNum || 0, rateNum || 0, monthsCalc || 0);
 
   const bankOptions = ['SBI', 'PNB', 'ICICI', 'AXIS', 'HDFC'];
+  const bankInList = bankOptions.includes(bank);
+  const selectedBankOption = bankInList ? bank : 'other';
 
   if (!isOpen) return null;
 
@@ -263,17 +265,35 @@ const AddFDModal: React.FC<AddFDModalProps> = ({
           </div>
           <div>
             <label className="block text-sm text-gray-400 mb-2">Associated Bank</label>
-            <input
-              type="text"
-              value={bank}
-              onChange={(e) => setBank(e.target.value)}
-              list="bank-options"
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 focus:outline-none focus:border-gray-600"
-              placeholder="Bank Name"
-            />
-            <datalist id="bank-options">
-              {bankOptions.map((b) => (<option key={b} value={b} />))}
-            </datalist>
+            <select
+              value={selectedBankOption}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (v === 'other') {
+                  if (bankOptions.includes(bank)) {
+                    setBank('');
+                  }
+                } else {
+                  setBank(v);
+                }
+              }}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-3 text-gray-300 focus:outline-none focus:border-gray-600"
+            >
+              <option value="">Select Bank</option>
+              {bankOptions.map((b) => (
+                <option key={b} value={b}>{b}</option>
+              ))}
+              <option value="other">Other...</option>
+            </select>
+            {selectedBankOption === 'other' && (
+              <input
+                type="text"
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+                className="mt-2 w-full bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 text-gray-300 focus:outline-none focus:border-gray-600"
+                placeholder="Enter bank name"
+              />
+            )}
           </div>
         </div>
 
